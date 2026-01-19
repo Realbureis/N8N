@@ -13,10 +13,10 @@ st.markdown("Filtra clientes novos (0 pedidos) com pedidos salvos e envia para a
 st.sidebar.header("Configurações de Conexão")
 webhook_url = st.sidebar.text_input(
     "URL do Webhook n8n", 
-    placeholder="https://realbureis.app.n8n.cloud/webhook-test/webhook/leads"
+    placeholder="https://realbureis.app.n8n.cloud/webhook-test/leads"
 )
 
-# --- Definição das Colunas (Conforme seu padrão) ---
+# --- Definição das Colunas (Conforme sua Planilha) ---
 COL_ID = 'Codigo Cliente'
 COL_NAME = 'Cliente'
 COL_PHONE = 'Fone Fixo'
@@ -27,22 +27,18 @@ COL_TOTAL_VALUE = 'Valor Total'
 
 @st.cache_data
 def process_leads(df_input):
-    """
-    Filtra leads: apenas clientes novos (0 pedidos anteriores) 
-    com o status específico de 'Pedido Salvo'.
-    """
     df = df_input.copy()
     
     # Garante que as colunas necessárias existam
     required = [COL_ID, COL_NAME, COL_PHONE, COL_FILTER, COL_STATUS, COL_ORDER_ID, COL_TOTAL_VALUE]
     if not all(c in df.columns for c in required):
         missing = [c for c in required if c not in df.columns]
-        raise ValueError(f"Colunas ausentes: {', '.join(missing)}")
+        raise ValueError(f"Colunas ausentes no arquivo: {', '.join(missing)}")
 
     # Converte coluna de filtro para numérico
     df[COL_FILTER] = pd.to_numeric(df[COL_FILTER], errors='coerce').fillna(-1)
     
-    # Lógica de Qualificação
+    # Lógica de Qualificação (0 pedidos enviados + Pedido Salvo)
     df_qualified = df[
         (df[COL_STATUS] == 'Pedido Salvo') & 
         (df[COL_FILTER] == 0)
@@ -62,7 +58,6 @@ if uploaded_file:
             
         df_leads = process_leads(df_raw)
         
-        # Exibição de Métricas
         st.subheader("Resultados da Filtragem")
         col1, col2 = st.columns(2)
         col1.metric("Total no Arquivo", len(df_raw))
@@ -79,24 +74,30 @@ if uploaded_file:
                     st.warning("⚠️ Por favor, insira a URL do Webhook no menu lateral.")
                 else:
                     with st.spinner("Preparando e enviando dados..."):
-                        # --- CORREÇÃO DO ERRO DE JSON (NaN) ---
-                        # O fillna('') substitui valores vazios por texto em branco, aceito pelo JSON
-                        df_payload = df_leads.fillna('') 
+                        # --- MAPEAMENTO SIMPLIFICADO PARA O N8N ---
+                        # Aqui renomeamos as colunas para evitar erros de nomes no n8n
+                        df_payload = df_leads.rename(columns={
+                            COL_NAME: 'nome_cliente',
+                            COL_PHONE: 'telefone',
+                            COL_ORDER_ID: 'id_pedido',
+                            COL_TOTAL_VALUE: 'valor_total'
+                        }).fillna('')
+                        
                         payload = df_payload.to_dict(orient='records')
                         
                         try:
-                            response = requests.post(webhook_url, json=payload, timeout=15)
+                            response = requests.post(webhook_url, json=payload, timeout=20)
                             
                             if response.status_code == 200:
                                 st.balloons()
-                                st.success("✅ Sucesso! Dados enviados para o n8n.")
+                                st.success(f"✅ Sucesso! {len(payload)} leads enviados para o n8n.")
                             else:
                                 st.error(f"Erro no n8n: Código {response.status_code}")
                                 st.write(response.text)
                         except Exception as e:
                             st.error(f"Falha na conexão: {e}")
         else:
-            st.info("Nenhum lead qualificado encontrado com os critérios (0 pedidos + Pedido Salvo).")
+            st.info("Nenhum lead qualificado encontrado.")
 
     except Exception as e:
         st.error(f"Erro ao processar arquivo: {e}")
