@@ -11,7 +11,7 @@ st.title("🤖 Recuperação de Carrinho com IA (n8n + OpenAI)")
 st.markdown("Filtra leads qualificados e envia automaticamente para o fluxo de IA no n8n.")
 
 # Configurações do n8n (Mude para sua URL quando criar o Webhook)
-N8N_WEBHOOK_URL = st.sidebar.text_input("URL do Webhook n8n", "https://seu-n8n.com/webhook/recuperacao-jumbo")
+N8N_WEBHOOK_URL = st.sidebar.text_input("URL do Webhook n8n", "https://realbureis.app.n8n.cloud/webhook-test/webhook/leads")
 
 # --- Definição das Colunas (Mantendo seu padrão) ---
 COL_ID = 'Codigo Cliente'
