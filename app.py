@@ -30,7 +30,7 @@ st.markdown("Filtra clientes novos (**0 pedidos**) com **pedidos salvos** e envi
 st.sidebar.header("⚙️ Configurações")
 webhook_url = st.sidebar.text_input(
     "URL do Webhook n8n", 
-    placeholder="https://sua-instancia.n8n.cloud/webhook/leads",
+    placeholder="https://realbureis.app.n8n.cloud/webhook-test/leads",
     help="Insira o endpoint do n8n que receberá os dados."
 )
 
