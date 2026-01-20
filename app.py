@@ -114,7 +114,7 @@ if uploaded_file:
                             payload = df_leads.rename(columns={
                                 COL_ID: 'id_pedido',
                                 COL_NAME: 'nome_cliente',
-                                COL_PHONE: 'telefone',
+                                COL_PHONE: 'Telefone',
                                 COL_TOTAL_VALUE: 'valor_total'
                             })[['id_pedido', 'nome_cliente', 'telefone', 'valor_total']].to_dict(orient='records')
                             
