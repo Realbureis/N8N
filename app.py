@@ -3,9 +3,10 @@ import pandas as pd
 import requests
 import re
 
-# --- Configurações da Página ---
-st.set_page_config(layout="wide", page_title="Automação Jumbo - Z-API", page_icon="🚀")
+# --- Configurações da Aplicação ---
+st.set_page_config(layout="wide", page_title="Automação Jumbo CDP", page_icon="🚀")
 
+# Estilo Visual
 st.markdown("""
     <style>
     .stButton>button {
@@ -19,7 +20,6 @@ st.markdown("""
     }
     .stButton>button:hover {
         background-color: #128C7E;
-        color: white;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -28,13 +28,13 @@ st.title("🚀 Recuperação de Carrinho - Sofia & Z-API")
 st.markdown("Filtro: **Status = 'Pedido Salvo'** e **Pedidos Enviados = 0**.")
 
 # --- Barra Lateral ---
-st.sidebar.header("⚙️ Configurações de Envio")
+st.sidebar.header("⚙️ Configurações")
 webhook_url = st.sidebar.text_input(
     "URL do Webhook n8n", 
-    placeholder="https://seu-n8n.cloud/webhook/leads"
+    placeholder="https://sua-instancia.n8n.cloud/webhook/leads"
 )
 
-# --- Definição das Colunas da Planilha ---
+# --- Mapeamento de Colunas da Planilha ---
 COL_ID = 'N. Pedido'
 COL_NAME = 'Cliente'
 COL_PHONE = 'Fone Fixo'
@@ -43,13 +43,13 @@ COL_STATUS = 'Status'
 COL_TOTAL_VALUE = 'Valor Total'
 
 def clean_phone(phone):
-    """Limpa o número e garante o prefixo 55 para o Brasil."""
+    """Remove caracteres especiais e garante o prefixo 55."""
     if pd.isna(phone): 
         return ""
     clean = re.sub(r'\D', '', str(phone))
     if not clean: 
         return ""
-    # Se tiver DDD (10 ou 11 dígitos), adiciona o 55
+    # Adiciona 55 para números com DDD (10 ou 11 dígitos)
     if len(clean) in [10, 11]:
         clean = "55" + clean
     return clean
@@ -58,7 +58,10 @@ def clean_phone(phone):
 def process_leads(df_input):
     df = df_input.copy()
     
-    # Verifica se todas as colunas necessárias existem
+    # Remove espaços extras nos nomes das colunas
+    df.columns = df.columns.str.strip()
+    
+    # Validação de colunas obrigatórias
     required = [COL_ID, COL_NAME, COL_PHONE, COL_FILTER, COL_STATUS, COL_TOTAL_VALUE]
     missing = [c for c in required if c not in df.columns]
     
@@ -70,7 +73,7 @@ def process_leads(df_input):
     df[COL_FILTER] = pd.to_numeric(df[COL_FILTER], errors='coerce').fillna(-1)
     df[COL_PHONE] = df[COL_PHONE].apply(clean_phone)
     
-    # Aplicação dos Filtros
+    # Filtro de Leads Qualificados
     df_qualified = df[
         (df[COL_STATUS] == 'Pedido Salvo') & 
         (df[COL_FILTER] == 0)
@@ -78,8 +81,8 @@ def process_leads(df_input):
 
     return df_qualified
 
-# --- Área de Upload ---
-uploaded_file = st.file_uploader("Arraste sua planilha (CSV ou Excel) aqui", type=["csv", "xlsx"])
+# --- Interface ---
+uploaded_file = st.file_uploader("Suba o arquivo Excel ou CSV", type=["csv", "xlsx"])
 
 if uploaded_file:
     try:
@@ -91,46 +94,37 @@ if uploaded_file:
         df_leads = process_leads(df_raw)
         
         if df_leads is not None:
-            # Painel de Métricas
-            c1, c2 = st.columns(2)
-            c1.metric("Total no Arquivo", len(df_raw))
-            c2.metric("Leads Qualificados", len(df_leads))
-
+            st.subheader(f"📊 Leads Qualificados: {len(df_leads)}")
+            st.dataframe(df_leads[[COL_ID, COL_NAME, COL_PHONE, COL_TOTAL_VALUE]], use_container_width=True)
+            
             if not df_leads.empty:
-                st.subheader("📋 Lista de Envio")
-                st.dataframe(
-                    df_leads[[COL_ID, COL_NAME, COL_PHONE, COL_TOTAL_VALUE]], 
-                    use_container_width=True
-                )
-                
                 st.divider()
-                
-                if st.button("🚀 DISPARAR MENSAGENS AGORA"):
+                if st.button("🚀 DISPARAR MENSAGENS VIA Z-API"):
                     if not webhook_url:
-                        st.warning("⚠️ Insira a URL do Webhook na barra lateral antes de disparar.")
+                        st.warning("⚠️ Insira a URL do Webhook na barra lateral.")
                     else:
                         with st.spinner("Enviando dados para o n8n..."):
-                            # Simplificação do Payload para o n8n
-                            payload = df_leads.rename(columns={
+                            # Ajuste de payload com 'Telefone' (T maiúsculo) para bater com o n8n
+                            payload_df = df_leads.rename(columns={
                                 COL_ID: 'id_pedido',
                                 COL_NAME: 'nome_cliente',
                                 COL_PHONE: 'Telefone',
                                 COL_TOTAL_VALUE: 'valor_total'
-                            })[['id_pedido', 'nome_cliente', 'telefone', 'valor_total']].to_dict(orient='records')
+                            })
+                            
+                            # Seleção das colunas renomeadas
+                            payload = payload_df[['id_pedido', 'nome_cliente', 'Telefone', 'valor_total']].to_dict(orient='records')
                             
                             try:
-                                response = requests.post(webhook_url, json=payload, timeout=30)
-                                if response.status_code in [200, 201]:
+                                r = requests.post(webhook_url, json=payload, timeout=30)
+                                if r.status_code in [200, 201]:
                                     st.balloons()
-                                    st.success(f"✅ Sucesso! {len(payload)} leads enviados para processamento.")
+                                    st.success(f"✅ Sucesso! {len(payload)} contatos enviados.")
                                 else:
-                                    st.error(f"❌ Erro no servidor: {response.status_code}")
+                                    st.error(f"❌ Erro no n8n: {r.status_code}")
                             except Exception as e:
-                                st.error(f"❌ Erro de conexão: {e}")
-            else:
-                st.info("Nenhum lead qualificado encontrado com os filtros aplicados.")
-
+                                st.error(f"❌ Falha de conexão: {e}")
     except Exception as e:
         st.error(f"💥 Erro ao processar arquivo: {e}")
 else:
-    st.info("💡 Dica: O arquivo deve conter as colunas: N. Pedido, Cliente, Fone Fixo, Status e Valor Total.")
+    st.info("👋 Aguardando planilha para iniciar a recuperação.")
